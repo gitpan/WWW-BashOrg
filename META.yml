@@ -1,25 +1,26 @@
 ---
-name: WWW-BashOrg
-version: 0.0102
+abstract: 'simple module to obtain quotes from http://bash.org/'
 author:
   - "'Zoffix <'zoffix@cpan.org'>"
-abstract: simple module to obtain quotes from http://bash.org/
-license: perl
-resources:
-  license: http://dev.perl.org/licenses/
 build_requires:
   Test::More: 0
-requires:
-  HTML::Entities: 3.57
-  HTML::TokeParser::Simple: 3.15
-  LWP::UserAgent: 5.829
 configure_requires:
-  Module::Build: 0.34
-provides:
-  WWW::BashOrg:
-    file: lib/WWW/BashOrg.pm
-    version: 0.0102
-generated_by: Module::Build version 0.34
+  Module::Build: 0.36
+generated_by: 'Module::Build version 0.3607'
+license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
+name: WWW-BashOrg
+provides:
+  WWW::BashOrg:
+    file: lib/WWW/BashOrg.pm
+    version: 0.0103
+requires:
+  Class::Data::Accessor: 0.04004
+  HTML::Entities: 3.57
+  HTML::TokeParser::Simple: 3.15
+  LWP::UserAgent: 5.829
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.0103

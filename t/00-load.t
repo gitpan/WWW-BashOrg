@@ -1,6 +1,7 @@
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 BEGIN {
+    use_ok('Class::Data::Accessor');
     use_ok('LWP::UserAgent');
     use_ok('HTML::TokeParser::Simple');
     use_ok('HTML::Entities');

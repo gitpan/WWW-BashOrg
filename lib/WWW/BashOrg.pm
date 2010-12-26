@@ -3,7 +3,7 @@ package WWW::BashOrg;
 use warnings;
 use strict;
 
-our $VERSION = '0.0102';
+our $VERSION = '0.0103';
 use LWP::UserAgent;
 use HTML::TokeParser::Simple;
 use HTML::Entities;

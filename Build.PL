@@ -14,6 +14,7 @@ my $builder = Module::Build->new(
         'App::ZofCMS::Test::Plugin' => '0.0104',
     },
     requires => {
+        'Class::Data::Accessor'    => 0.04004,
         'LWP::UserAgent'           => 5.829,
         'HTML::TokeParser::Simple' => 3.15,
         'HTML::Entities'           => 3.57,
