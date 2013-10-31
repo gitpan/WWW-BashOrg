@@ -10,6 +10,7 @@ my $builder = Module::Build->new(
     build_requires => {
         'Test::More' => 0,
     },
+    configure_requires => { 'Module::Build' => 0 },
     build_recommends => {
         'App::ZofCMS::Test::Plugin' => '0.0104',
     },
@@ -18,6 +19,7 @@ my $builder = Module::Build->new(
         'LWP::UserAgent'           => 5.829,
         'HTML::TokeParser::Simple' => 3.15,
         'HTML::Entities'           => 3.57,
+        perl                       => 5.006,
     },
     add_to_cleanup      => [ 'WWW-BashOrg-*' ],
     create_makefile_pl => 'traditional',

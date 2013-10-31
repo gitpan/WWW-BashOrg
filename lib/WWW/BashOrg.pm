@@ -3,18 +3,18 @@ package WWW::BashOrg;
 use warnings;
 use strict;
 
-our $VERSION = '0.0103';
+our $VERSION = '0.0104';
 use LWP::UserAgent;
 use HTML::TokeParser::Simple;
 use HTML::Entities;
 use overload q|""| => sub { shift->quote };
 use base 'Class::Data::Accessor';
 
-__PACKAGE__->mk_classaccessors qw/
+__PACKAGE__->mk_classaccessors(qw/
     ua
     error
     quote
-/;
+/);
 
 sub new {
     my $class = shift;
