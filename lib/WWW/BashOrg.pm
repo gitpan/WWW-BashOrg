@@ -3,7 +3,8 @@ package WWW::BashOrg;
 use warnings;
 use strict;
 
-our $VERSION = '0.0104';
+our $VERSION = '1.001001'; # VERSION
+
 use LWP::UserAgent;
 use HTML::TokeParser::Simple;
 use HTML::Entities;
@@ -14,6 +15,7 @@ __PACKAGE__->mk_classaccessors(qw/
     ua
     error
     quote
+    default_site
 /);
 
 sub new {
@@ -24,6 +26,7 @@ sub new {
         agent   => 'Opera 9.5',
         timeout => 30,
     ) unless defined $args{ua};
+    $args{default_site} ||= 'bash';
 
     my $self = bless {}, $class;
 
@@ -33,8 +36,9 @@ sub new {
 }
 
 sub get_quote {
-    my ( $self, $num ) = @_;
+    my ( $self, $num, $site ) = @_;
 
+    $site = $self->_normalise_site($site);
     $self->quote( undef );
     $self->error( undef );
 
@@ -43,13 +47,13 @@ sub get_quote {
         return;
     }
 
-    my $res = $self->{ua}->get("http://bash.org/?quote=$num");
+    my $res = $self->{ua}->get( ( ($site eq 'bash') ? "http://bash.org/?quote=" : "http://www.qdb.us/" ) . $num );
     unless ( $res->is_success ) {
         $self->error("Network error: " . $res->status_line );
         return;
     }
 
-    my $quote = $self->_parse_quote( $res->decoded_content );
+    my $quote = ( $self->_parse_quote( $res->decoded_content, $site ) )[0];
     unless ( defined $quote ) {
         $self->error('Quote not found');
         return;
@@ -59,24 +63,34 @@ sub get_quote {
 }
 
 sub random {
-    my $self = shift;
+    my ($self, $site) = @_;
 
+    $site = $self->_normalise_site($site);
     $self->quote( undef );
     $self->error( undef );
 
-    my $res = $self->{ua}->get("http://bash.org/?random1");
-    unless ( $res->is_success ) {
-        $self->error("Network error: " . $res->status_line );
-        return;
+    unless ( @{ $self->{'cache'.$site} || [] } ) {
+        my $res = $self->{ua}->get(
+            $site eq 'bash'
+                ? "http://bash.org/?random1"
+                : "http://www.qdb.us/random"
+        );
+
+        unless ( $res->is_success ) {
+            $self->error("Network error: " . $res->status_line );
+            return;
+        }
+
+        @{ $self->{'cache'.$site} }
+        = $self->_parse_quote( $res->decoded_content, $site );
+
+        unless ( @{ $self->{'cache'.$site} } ) {
+            $self->error('Quote not found');
+            return;
+        }
     }
 
-    my $quote = $self->_parse_quote( $res->decoded_content );
-    unless ( defined $quote ) {
-        $self->error('Quote not found');
-        return;
-    }
-
-    return $self->quote( $quote );
+    return $self->quote( pop @{ $self->{'cache'.$site} } );
 }
 
 sub _parse_quote {
@@ -86,8 +100,9 @@ sub _parse_quote {
 
     my $get_quote;
     my $quote;
+    my @quotes;
     while ( my $t = $p->get_token ) {
-        if ( $t->is_start_tag('p')
+        if ( ( $t->is_start_tag('p') || $t->is_start_tag('span') )
             and defined $t->get_attr('class')
             and $t->get_attr('class') eq 'qt'
         ) {
@@ -98,21 +113,31 @@ sub _parse_quote {
             $quote .= $t->as_is;
         }
 
-        if ( $get_quote and $t->is_end_tag('p') ) {
+        if ( $get_quote and ( $t->is_end_tag('p') || $t->is_end_tag('span') ) ) {
             $quote =~ s/&nbsp;/ /g;
-            return decode_entities $quote;
+            push @quotes, decode_entities $quote;
+            $quote = ''; $get_quote = 0;
         }
     }
 
-    return undef;
+    return @quotes;
+}
+
+sub _normalise_site {
+    my ( $self, $site ) = @_;
+    $site ||= $self->default_site;
+    ( $site ne 'bash' && $site ne 'qdb' ) and $site = $self->default_site;
+    return $site;
 }
 
 1;
 __END__
 
+=encoding utf8
+
 =head1 NAME
 
-WWW::BashOrg - simple module to obtain quotes from http://bash.org/
+WWW::BashOrg - simple module to obtain quotes from http://bash.org/ and http://www.qdb.us/
 
 =head1 SYNOPSIS
 
@@ -135,11 +160,13 @@ WWW::BashOrg - simple module to obtain quotes from http://bash.org/
 =head1 DESCRIPTION
 
 A simple a module to obtain either a random quote or a quote by number from
-L<http://bash.org/>.
+either L<http://bash.org/> or L<http://qdb.us/>.
 
 =head1 CONSTRUCTOR
 
 =head2 C<new>
+
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-key-value.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-object.png">
 
     my $b = WWW::BashOrg->new;
 
@@ -150,8 +177,8 @@ L<http://bash.org/>.
         )
     );
 
-Returns a newly baked C<WWW::BashOrg> object. All arguments are options, so far only
-one argument is available:
+Returns a newly baked C<WWW::BashOrg> object. All arguments are options, so far there
+are only two arguments are available:
 
 =head3 C<ua>
 
@@ -159,37 +186,60 @@ one argument is available:
         ua  => LWP::UserAgent->new(
             agent   => 'Opera 9.5',
             timeout => 30,
-        )
+        ),
     );
 
 B<Optional>. Takes an L<LWP::UserAgent> object as a value. This object will be used for
-fetching quotes from L<http://bash.org/>. B<Defaults to:>
+fetching quotes from L<http://bash.org/> or L<http://qdb.us/>. B<Defaults to:>
 
     LWP::UserAgent->new(
         agent   => 'Opera 9.5',
         timeout => 30,
     )
 
+=head3 C<default_site>
+
+    my $b = WWW::BashOrg->new(
+        default_site  => 'qdb'
+    );
+
+B<Optional>. Which site to retrieve quotes from by default when not
+specified in the method
+parameters, C<'qdb'> or C<'bash'>. Default is C<'bash'>.
+
 =head1 METHODS
 
 =head2 C<get_quote>
 
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-scalar-scalar-optional.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-scalar.png">
+
     my $quote = $b->get_quote('202477')
         or die $b->error;
 
-Takes one mandatory argument - the number of the quote to fetch. Returns a string with the
-quote that was requested. If an error occurs, returns
+    $quote = $b->get_quote('1622', 'qdb')
+        or die $b->error;
+
+The first argument, the number of the quote to fetch, is mandatory.
+You may also optionally specify
+which site to retrieve the quote from
+(C<'qdb'> or C<'bash'>). If an error occurs, returns
 C<undef> and the reason for failure can be obtained using C<error()> method.
 
 =head2 C<random>
 
-    my $quote = $b->random
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-scalar-optional.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-scalar.png">
+
+    my $quote = $b->random('bash')
         or die $b->error;
 
-Takes no argumnets. Returns a random quote. If an error occurs, returns
-C<undef> and the reason for failure can be obtained using C<error()> method.
+Has one optional argument, which site to return quote from
+(C<'qdb'> or C<'bash'>). Returns a random quote.
+If an error occurs, returns C<undef> and the reason for failure can be obtained using
+C<error()> method.
 
 =head2 C<error>
+
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-no-args.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-scalar.png">
 
     my $quote = $b->random
         or die $b->error;
@@ -199,16 +249,20 @@ the reason for failure.
 
 =head2 C<quote>
 
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-no-args.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-scalar.png">
+
     my $last_quote = $b->quote;
 
     my $last_quote = "$b";
 
-Takes no arguments. Must be called after a successfull call to either C<random()> or
+Takes no arguments. Must be called after a successful call to either C<random()> or
 C<get_quote()>. Returns the same return value as last C<random()> or C<get_quote()> returned.
 B<This method is overloaded> thus you can interpolate C<WWW::Bashorg> in a string to obtain
 the quote.
 
 =head2 C<ua>
+
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-object.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-object.png">
 
     my $old_ua = $b->ua;
 
@@ -220,55 +274,63 @@ Returns current L<LWP::UserAgent> object that is used for fetching quotes. Takes
 option argument that must be an L<LWP::UserAgent> object (or compatible) - this object
 will be used for any future requests.
 
-=head1 AUTHOR
+=head2 C<default_site>
 
-'Zoffix, C<< <'zoffix at cpan.org'> >>
-(L<http://haslayout.net/>, L<http://zoffix.com/>, L<http://zofdesign.com/>)
+=for html  <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/in-scalar-optional.png"> <img alt="" src="http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/out-scalar.png">
+
+    if ( $b->default_site eq 'qdb' ) {
+        $b->default_site('bash');
+    }
+
+Returns current default site to retrieve quotes from. Takes an optional argument to change this setting (C<'qdb'> or C<'bash'>).
+
+=for html <div style="background: url(http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/hr.png);height: 18px;"></div>
+
+=head1 REPOSITORY
+
+=for html  <div style="display: table; height: 91px; background: url(http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/section-github.png) no-repeat left; padding-left: 120px;" ><div style="display: table-cell; vertical-align: middle;">
+
+Fork this module on GitHub:
+L<https://github.com/zoffixznet/WWW-BashOrg>
+
+=for html  </div></div>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-www-bashorg at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=WWW-BashOrg>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+=for html  <div style="display: table; height: 91px; background: url(http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/section-bugs.png) no-repeat left; padding-left: 120px;" ><div style="display: table-cell; vertical-align: middle;">
 
+To report bugs or request features, please use
+L<https://github.com/zoffixznet/WWW-BashOrg/issues>
 
-=head1 SUPPORT
+If you can't access GitHub, you can email your request
+to C<bug-WWW-BashOrg at rt.cpan.org>
 
-You can find documentation for this module with the perldoc command.
+=for html  </div></div>
 
-    perldoc WWW::BashOrg
+=head1 AUTHOR
 
-You can also look for information at:
+=for html  <div style="display: table; height: 91px; background: url(http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/section-author.png) no-repeat left; padding-left: 120px;" ><div style="display: table-cell; vertical-align: middle;">
 
-=over 4
+=for html   <span style="display: inline-block; text-align: center;"> <a href="http://metacpan.org/author/ZOFFIX"> <img src="http://www.gravatar.com/avatar/328e658ab6b08dfb5c106266a4a5d065?d=http%3A%2F%2Fwww.gravatar.com%2Favatar%2F627d83ef9879f31bdabf448e666a32d5" alt="ZOFFIX" style="display: block; margin: 0 3px 5px 0!important; border: 1px solid #666; border-radius: 3px; "> <span style="color: #333; font-weight: bold;">ZOFFIX</span> </a> </span>
 
-=item * RT: CPAN's request tracker
+=for text Zoffix Znet <zoffix at cpan.org>
 
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=WWW-BashOrg>
+=for html  </div></div>
 
-=item * AnnoCPAN: Annotated CPAN documentation
+=head1 CONTRIBUTORS
 
-L<http://annocpan.org/dist/WWW-BashOrg>
+=for html  <div style="display: table; height: 91px; background: url(http://zoffix.com/CPAN/Dist-Zilla-Plugin-Pod-Spiffy/icons/section-contributors.png) no-repeat left; padding-left: 120px;" ><div style="display: table-cell; vertical-align: middle;">
 
-=item * CPAN Ratings
+=for html   <span style="display: inline-block; text-align: center;"> <a href="http://metacpan.org/author/JBARRETT"> <img src="http://www.gravatar.com/avatar/6a296a67e2590050b299c30751a01919?d=http%3A%2F%2Fwww.gravatar.com%2Favatar%2F3a47418b43981827dbc0e147c2f9199c" alt="JBARRETT" style="display: block; margin: 0 3px 5px 0!important; border: 1px solid #666; border-radius: 3px; "> <span style="color: #333; font-weight: bold;">JBARRETT</span> </a> </span>
 
-L<http://cpanratings.perl.org/d/WWW-BashOrg>
+=for text John Barrett <john@jbrt.org>
 
-=item * Search CPAN
+=for html  </div></div>
 
-L<http://search.cpan.org/dist/WWW-BashOrg/>
+=head1 LICENSE
 
-=back
-
-
-
-=head1 COPYRIGHT & LICENSE
-
-Copyright 2009 'Zoffix, all rights reserved.
-
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-
+You can use and distribute this module under the same terms as Perl itself.
+See the C<LICENSE> file included in this distribution for complete
+details.
 
 =cut
-
