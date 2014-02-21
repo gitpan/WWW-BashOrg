@@ -21,7 +21,7 @@ my %WriteMakefileArgs = (
   "LICENSE" => "perl",
   "NAME" => "WWW::BashOrg",
   "PREREQ_PM" => {
-    "Class::Data::Accessor" => 0,
+    "Class::Accessor::Grouped" => 0,
     "HTML::Entities" => 0,
     "HTML::TokeParser::Simple" => 0,
     "LWP::UserAgent" => 0,
@@ -36,7 +36,7 @@ my %WriteMakefileArgs = (
     "IPC::Open3" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.001001",
+  "VERSION" => "1.001002",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -44,7 +44,7 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "Class::Data::Accessor" => 0,
+  "Class::Accessor::Grouped" => 0,
   "File::Spec" => 0,
   "HTML::Entities" => 0,
   "HTML::TokeParser::Simple" => 0,
